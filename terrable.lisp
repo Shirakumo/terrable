@@ -6,6 +6,31 @@
 
 (in-package #:org.shirakumo.fraf.terrable)
 
+(define-condition terrable-condition (condition)
+  ())
+
+(define-condition invalid-header (terrable-condition error)
+  ((header :initarg :header :reader header))
+  (:report (lambda (c s) (format s "Unexpected header string: ~a" (header c)))))
+
+(define-condition unknown-chunk-type (terrable-condition warning)
+  ((chunk-type :initarg :chunk-type :reader chunk-type))
+  (:report (lambda (c s) (format s "Unknown chunk type: ~a" (chunk-type c)))))
+
+(define-condition unknown-curvature-type (terrable-condition warning)
+  ((curvature-type :initarg :curvature-type :reader curvature-type))
+  (:report (lambda (c s) (format s "Unknown curvature type: ~a" (curvature-type c)))))
+
+(defclass terrain ()
+  ((width :initform NIL :accessor width)
+   (height :initform NIL :accessor height)
+   (scale :initform (list 30 30 30) :accessor scale)
+   (curve-radius :initform 6370 :accessor curve-radius)
+   (curve-mode :initform :flat :accessor curve-mode)
+   (height-base :initform 0 :accessor height-base)
+   (height-scale :initform 1f0 :accessor height-scale)
+   (data :initform NIL :accessor data)))
+
 (defun read-marker (stream buffer &key start end)
   (loop for i from (or start 0) below (or end (length buffer))
         for code = (fast-io:readu8 stream)
@@ -15,15 +40,7 @@
 (defun check-header (stream buffer expected)
   (read-marker stream buffer)
   (unless (string= buffer expected)
-    (error "Invalid header: got ~s, expected ~s." buffer expected)))
-
-(defclass terrain ()
-  ((width :initform NIL :accessor width)
-   (height :initform NIL :accessor height)
-   (scale :initform NIL :accessor scale)
-   (curve-radius :initform NIL :accessor curve-radius)
-   (curve-mode :initform NIL :accessor curve-mode)
-   (data :initform NIL :accessor data)))
+    (error 'invalid-header :header buffer)))
 
 (defun read-chunk (stream buffer terrain)
   (let ((marker (read-marker stream buffer :end 4)))
@@ -53,25 +70,45 @@
                (setf (curve-mode terrain) (case m
                                             (0 :flat)
                                             (1 :draped)
-                                            (T (warn "Non-standard curvature mode: ~s" m)
+                                            (T (warn 'unknown-curvature-type :curvature-type m)
                                              m)))))
             ((markerp "ALTW")
-             (let* ((h-scale (fast-io:read16-le stream))
-                    (h-base (fast-io:read16-le stream))
-                    ;; FIXME
-                    (factor ?)
-                    (data (static-vectors:make-static-vector (* (width terrain) (height terrain) 2))))
+             (setf (height-scale terrain) (float (/ (fast-io:read16-le stream) 65536) 0f0))
+             (setf (height-base terrain) (fast-io:read16-le stream))
+             (let ((data (static-vectors:make-static-vector (* (width terrain) (height terrain) 2))))
                (fast-io:fast-read-sequence data stream)
                (setf (data terrain) data)))
             ((markerp "EOF ")
              NIL)
             (T
-             (warn "Unknown chunk type: ~a" (subseq marker 0 4))
+             (warn 'unknown-chunk-type :chunk-type (subseq marker 0 4))
              terrain)))))
 
-(defun read-terragen (stream)
-  (let ((marker-buffer (make-array 8 :element-type 'base-char))
+(defun read-buffer (stream)
+  (let ((buffer (make-array 8 :element-type 'base-char))
         (terrain (make-instance 'terrain)))
     (check-header stream buffer "TERRAGEN")
     (check-header stream buffer "TERRAIN ")
-    (loop while (read-chunk stream buffer terrain))))
+    (loop while (read-chunk stream buffer terrain))
+    terrain))
+
+(defgeneric read-terragen (input))
+
+(defmethod read-terragen ((buffer fast-io:input-buffer))
+  (read-buffer buffer))
+
+(defmethod read-terragen ((stream stream))
+  (fast-io:with-fast-input (buffer NIL stream)
+    (read-buffer buffer)))
+
+(defmethod read-terragen ((pathname pathname))
+  (with-open-file (stream pathname :direction :input
+                                   :element-type '(unsigned-byte 8))
+    (read-terragen pathname)))
+
+(defmethod read-terragen ((string string))
+  (read-terragen (pathname string)))
+
+(defmethod read-terragen ((vector vector))
+  (fast-io:with-fast-input (buffer vector)
+    (read-buffer buffer)))
