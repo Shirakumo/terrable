@@ -68,7 +68,8 @@ is automatically deallocated with it. If you keep foreign references to
 the data, or reference it somewhere else, you will need to keep a
 reference to the TERRAIN instance around as well, copy the contents
 of the data vector elsewhere, or call TG:CANCEL-FINALIZATION on the
-TERRAIN instance to get rid of its automatic deallocation behaviour.
+TERRAIN instance to get rid of its automatic deallocation behaviour. If
+you would like to manually free the terrain instantly, use FREE-TERRAIN.
 
 See WIDTH
 See HEIGHT
@@ -78,7 +79,8 @@ See CURVE-MODE
 See HEIGHT-BASE
 See HEIGHT-SCALE
 See DATA
-See READ-TERRAGEN")
+See READ-TERRAGEN
+See FREE-TERRAIN")
   
   (function width
     "Returns the width (in pixels) of the terrain.
@@ -176,5 +178,13 @@ See TERRAIN
 See TERRABLE-CONDITION
 See INVALID-HEADER
 See UNKNOWN-CHUNK-TYPE
-See UNKNOWN-CURVATURE-TYPE"))
+See UNKNOWN-CURVATURE-TYPE")
+
+  (function free-terrain
+    "Instantly frees the data array in the terrain instance.
+
+After calling this function on a TERRAIN instance, its data slot will
+contain NIL and all references to the former data array will be invalid.
+
+See TERRAIN"))
 

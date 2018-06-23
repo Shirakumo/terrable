@@ -25,4 +25,5 @@
    #:height-base
    #:height-scale
    #:data
-   #:read-terragen))
+   #:read-terragen
+   #:free-terrain))

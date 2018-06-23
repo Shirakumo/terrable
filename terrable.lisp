@@ -144,3 +144,8 @@
 (defmethod read-terragen ((vector vector))
   (fast-io:with-fast-input (buffer vector)
     (read-buffer buffer)))
+
+(defmethod free-terrain ((terrain terrain))
+  (tg:cancel-finalization terrain)
+  (static-vectors:free-static-vector (data terrain))
+  (setf (data terrain) NIL))
