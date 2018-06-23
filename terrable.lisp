@@ -103,10 +103,11 @@
                            (the (unsigned-byte 16) (height terrain))
                            2))
                   (data (static-vectors:make-static-vector size)))
+             (setf (data terrain) data)
+             (tg:finalize terrain (lambda () (static-vectors:free-static-vector data)))
              (loop for start of-type (unsigned-byte 32) = 0
                    then (fast-io:fast-read-sequence data buffer start)
-                   while (< start size))
-             (setf (data terrain) data)))
+                   while (< start size))))
           ((markerp "EOF ")
            NIL)
           (T

@@ -18,4 +18,5 @@
   :depends-on (:fast-io
                :ieee-floats
                :static-vectors
+               :trivial-garbage
                :documentation-utils))
