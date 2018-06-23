@@ -7,19 +7,24 @@
 (in-package #:org.shirakumo.fraf.terrable)
 
 (define-condition terrable-condition (condition)
-  ())
+  ((position :initarg :position :reader stream-position))
+  (:report (lambda (c s) (format s "Terragen file problem at ~d."
+                                 (stream-position c)))))
 
 (define-condition invalid-header (terrable-condition error)
   ((header :initarg :header :reader header))
-  (:report (lambda (c s) (format s "Unexpected header string: ~a" (header c)))))
+  (:report (lambda (c s) (format s "Unexpected header string at ~d: ~a"
+                                 (stream-position c) (header c)))))
 
 (define-condition unknown-chunk-type (terrable-condition warning)
   ((chunk-type :initarg :chunk-type :reader chunk-type))
-  (:report (lambda (c s) (format s "Unknown chunk type: ~a" (chunk-type c)))))
+  (:report (lambda (c s) (format s "Unknown chunk type at ~d: ~a"
+                                 (stream-position c) (chunk-type c)))))
 
 (define-condition unknown-curvature-type (terrable-condition warning)
   ((curvature-type :initarg :curvature-type :reader curvature-type))
-  (:report (lambda (c s) (format s "Unknown curvature type: ~a" (curvature-type c)))))
+  (:report (lambda (c s) (format s "Unknown curvature type at ~d: ~a"
+                                 (stream-position c) (curvature-type c)))))
 
 (defclass terrain ()
   ((width :initform NIL :accessor width)
@@ -30,6 +35,10 @@
    (height-base :initform 0 :accessor height-base)
    (height-scale :initform 1f0 :accessor height-scale)
    (data :initform NIL :accessor data)))
+
+(defmethod print-object ((terrain terrain) stream)
+  (print-unreadable-object (terrain stream :type T :identity T)
+    (format stream "~dx~d ~a" (width terrain) (height terrain) (curve-mode terrain))))
 
 (defun read-marker (buffer marker &key start end)
   (declare (type (simple-array base-char (8)) marker))
@@ -42,7 +51,9 @@
 (defun check-header (buffer marker expected)
   (read-marker buffer marker)
   (unless (string= marker expected)
-    (error 'invalid-header :header marker)))
+    (error 'invalid-header
+           :position (fast-io:buffer-position buffer)
+           :header marker)))
 
 (defun read-chunk (buffer marker terrain)
   (declare (type fast-io:input-buffer buffer)
@@ -54,13 +65,15 @@
       (declare (ignore e))
       (return-from read-chunk NIL)))
   (flet ((markerp (thing)
-           (string= marker thing :end2 4)))
+           (string= marker thing :end1 4)))
     (cond ((markerp "XPTS")
            (setf (width terrain) (fast-io:readu16-le buffer)))
           ((markerp "YPTS")
            (setf (height terrain) (fast-io:readu16-le buffer)))
           ((markerp "SIZE")
            (let ((n (1+ (fast-io:readu16-le buffer))))
+             (fast-io:fast-read-byte buffer)
+             (fast-io:fast-read-byte buffer)
              (unless (height terrain) (setf (height terrain) n))
              (unless (width terrain) (setf (width terrain) n))
              n))
@@ -79,7 +92,9 @@
              (setf (curve-mode terrain) (case m
                                           (0 :flat)
                                           (1 :draped)
-                                          (T (warn 'unknown-curvature-type :curvature-type m)
+                                          (T (warn 'unknown-curvature-type
+                                                   :position (fast-io:buffer-position buffer)
+                                                   :curvature-type m)
                                            m)))))
           ((markerp "ALTW")
            (setf (height-scale terrain) (/ (float (fast-io:read16-le buffer) 0f0) 65536f0))
@@ -88,12 +103,16 @@
                            (the (unsigned-byte 16) (height terrain))
                            2))
                   (data (static-vectors:make-static-vector size)))
-             (fast-io:fast-read-sequence data buffer)
+             (loop for start of-type (unsigned-byte 32) = 0
+                   then (fast-io:fast-read-sequence data buffer start)
+                   while (< start size))
              (setf (data terrain) data)))
           ((markerp "EOF ")
            NIL)
           (T
-           (warn 'unknown-chunk-type :chunk-type (subseq marker 0 4))
+           (warn 'unknown-chunk-type
+                 :position (fast-io:buffer-position buffer)
+                 :chunk-type (subseq marker 0 4))
            terrain))))
 
 (defun read-buffer (buffer)
@@ -116,7 +135,7 @@
 (defmethod read-terragen ((pathname pathname))
   (with-open-file (stream pathname :direction :input
                                    :element-type '(unsigned-byte 8))
-    (read-terragen pathname)))
+    (read-terragen stream)))
 
 (defmethod read-terragen ((string string))
   (read-terragen (pathname string)))
