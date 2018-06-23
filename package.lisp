@@ -9,6 +9,7 @@
   (:use #:cl)
   (:export
    #:terrable-condition
+   #:stream-position
    #:invalid-header
    #:header
    #:unknown-chunk-type
