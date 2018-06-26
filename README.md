@@ -2,9 +2,9 @@
 Terrable implements a parser for the Terragen terrain file format (`.TER`). You can find a format reference [here](https://planetside.co.uk/wiki/index.php?title=Terragen_.TER_Format).
 
 ## How To
-To parse a file, you can pass a file, vector, or fast-io buffer to `read-terragen`.
+To parse a file, you can pass a file, vector, or fast-io buffer to `read-terrain`.
 
-    (terrable:read-terragen #p"~/heightmap.ter")
+    (terrable:read-terrain #p"~/heightmap.ter")
 
 If everything goes well, you should have a fresh `terrain` instance with `width`, `height`, `scale`, `curve-radius`, `curve-mode`, `height-base`, `height-scale`, and `data` slots all filled out for you. The data is parsed as a static-vector, meaning it is directly passable to C libraries like OpenGL for further processing.
 
@@ -14,3 +14,5 @@ If everything goes well, you should have a fresh `terrain` instance with `width`
 And that's it. Note that finalizers are used to automatically deallocate the data array when the terrain instance is garbage collected. If you want to manually free the terrain data instantly, you can use `free-terrain`.
 
     (terrable:free-terrain **)
+
+Finally, if you would like to generate terrain files, you can simply call `write-terrain` on a complete Terrain object. It'll write out all known chunks to the file, even if they might be superfluous.

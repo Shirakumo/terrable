@@ -100,14 +100,13 @@
            (setf (height-scale terrain) (/ (float (fast-io:read16-le buffer) 0f0) 65536f0))
            (setf (height-base terrain) (fast-io:read16-le buffer))
            (let* ((size (* (the (unsigned-byte 16) (width terrain))
-                           (the (unsigned-byte 16) (height terrain))
-                           2))
-                  (data (static-vectors:make-static-vector size)))
+                           (the (unsigned-byte 16) (height terrain))))
+                  (data (static-vectors:make-static-vector size :element-type '(signed-byte 16))))
              (setf (data terrain) data)
              (tg:finalize terrain (lambda () (static-vectors:free-static-vector data)))
-             (loop for start of-type (unsigned-byte 32) = 0
-                   then (fast-io:fast-read-sequence data buffer start)
-                   while (< start size))))
+             (loop for i of-type (unsigned-byte 32) from 0 below size
+                   do (setf (aref data i) (fast-io:read16-le buffer)))
+             terrain))
           ((markerp "EOF ")
            NIL)
           (T
@@ -124,24 +123,24 @@
     (loop while (read-chunk buffer marker terrain))
     terrain))
 
-(defgeneric read-terragen (input))
+(defgeneric read-terrain (input))
 
-(defmethod read-terragen ((buffer fast-io:input-buffer))
+(defmethod read-terrain ((buffer fast-io:input-buffer))
   (read-buffer buffer))
 
-(defmethod read-terragen ((stream stream))
+(defmethod read-terrain ((stream stream))
   (fast-io:with-fast-input (buffer NIL stream)
     (read-buffer buffer)))
 
-(defmethod read-terragen ((pathname pathname))
+(defmethod read-terrain ((pathname pathname))
   (with-open-file (stream pathname :direction :input
                                    :element-type '(unsigned-byte 8))
-    (read-terragen stream)))
+    (read-terrain stream)))
 
-(defmethod read-terragen ((string string))
-  (read-terragen (pathname string)))
+(defmethod read-terrain ((string string))
+  (read-terrain (pathname string)))
 
-(defmethod read-terragen ((vector vector))
+(defmethod read-terrain ((vector vector))
   (fast-io:with-fast-input (buffer vector)
     (read-buffer buffer)))
 
@@ -149,3 +148,57 @@
   (tg:cancel-finalization terrain)
   (static-vectors:free-static-vector (data terrain))
   (setf (data terrain) NIL))
+
+(defun write-marker (buffer marker)
+  (loop for char across marker
+        do (fast-io:writeu8 (char-code char) buffer)))
+
+(defun write-buffer (buffer terrain)
+  (write-marker buffer "TERRAGEN")
+  (write-marker buffer "TERRAIN ")
+  (write-marker buffer "SIZE")
+  (fast-io:writeu16-le (1- (min (height terrain) (width terrain))) buffer)
+  (fast-io:writeu16-le 0 buffer)
+  (write-marker buffer "XPTS")
+  (fast-io:writeu16-le (width terrain) buffer)
+  (write-marker buffer "YPTS")
+  (fast-io:writeu16-le (height terrain) buffer)
+  (write-marker buffer "SCAL")
+  (destructuring-bind (x y z) (scale terrain)
+    (fast-io:writeu32-le (ieee-floats:encode-float32 x) buffer)
+    (fast-io:writeu32-le (ieee-floats:encode-float32 y) buffer)
+    (fast-io:writeu32-le (ieee-floats:encode-float32 z) buffer))
+  (write-marker buffer "CRAD")
+  (fast-io:writeu32-le (ieee-floats:encode-float32 (curve-radius terrain)) buffer)
+  (write-marker buffer "CRVM")
+  (fast-io:writeu32-le (case (curve-mode terrain)
+                         (:flat 0)
+                         (:draped 1)
+                         (T (curve-mode terrain)))
+                       buffer)
+  (write-marker buffer "ALTW")
+  (fast-io:write16-le (round (* (height-scale terrain) 65536)) buffer)
+  (fast-io:write16-le (height-base terrain) buffer)
+  (loop for el across (data terrain)
+        do (fast-io:write16-le el buffer))
+  (write-marker buffer "EOF ")
+  buffer)
+
+(defgeneric write-terrain (terrain output))
+
+(defmethod write-terrain ((terrain terrain) (buffer fast-io:output-buffer))
+  (write-buffer buffer terrain))
+
+(defmethod write-terrain (terrain (stream stream))
+  (fast-io:with-fast-output (buffer stream)
+    (write-terrain terrain buffer)))
+
+(defmethod write-terrain (terrain (pathname pathname))
+  (with-open-file (stream pathname :direction :output
+                                   :element-type '(unsigned-byte 8))
+    (write-terrain terrain stream)
+    pathname))
+
+(defmethod write-terrain (terrain (output symbol))
+  (fast-io:with-fast-output (buffer output)
+    (write-terrain terrain buffer)))

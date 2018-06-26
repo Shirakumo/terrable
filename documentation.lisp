@@ -79,7 +79,7 @@ See CURVE-MODE
 See HEIGHT-BASE
 See HEIGHT-SCALE
 See DATA
-See READ-TERRAGEN
+See READ-TERRAIN
 See FREE-TERRAIN")
   
   (function width
@@ -147,13 +147,10 @@ See HEIGHT-BASE")
   (function data
     "Returns a static-vector of the pixel data that makes up the terrain.
 
-This pixel-data is a sequence of 16 bit signed integers, stored in little-
-endian encoding in an unsigned-byte 8 array. If you don't immediately load
-this into another software like OpenGL, you will have to stitch the
-integers back together manually.
+This pixel-data is a sequence of 16 bit signed integers.
 
-Also note that these units are not directly in the scale of SCALE, but
-must first be normalised by adding HEIGHT-BASE and then multiplying by
+Note that these units are not directly in the scale of SCALE, but must
+first be normalised by adding HEIGHT-BASE and then multiplying by
 HEIGHT-SCALE.
 
 Finally, note that this is a static-vector and is thus directly passable
@@ -164,7 +161,7 @@ See HEIGHT-SCALE
 See STATIC-VECTORS:STATIC-VECTOR-POINTER
 See TERRAIN")
   
-  (function read-terragen
+  (function read-terrain
     "Parses the given thing as a Terragen terrain.
 
 Returns the complete TERRAIN instance if successful. This function will
@@ -185,6 +182,16 @@ See UNKNOWN-CURVATURE-TYPE")
 
 After calling this function on a TERRAIN instance, its data slot will
 contain NIL and all references to the former data array will be invalid.
+
+See TERRAIN")
+
+  (function write-terrain
+    "Writes the given terrain object to a Terragen TER format.
+
+The input can either be a FAST-IO:OUTPUT-BUFFER, a STREAM, a PATHNAME,
+the keyword :VECTOR, or the keyword :STATIC. In the latter two cases, a
+vector with the written output is returned. In the case of a pathname,
+an error is signalled if the file already exists.
 
 See TERRAIN"))
 
